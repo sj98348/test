@@ -60,7 +60,12 @@ export const App = ({ context, dataset }: AppProps) => {
 
     initializeUserLocation();
   }, [context]);
+  const getEnvironmentName = (): string => {
+  const hostName = window.location.hostname;
 
+  return hostName.split(".")[0];
+ };
+  const environmentName = getEnvironmentName();
   const renderScreen = () => {
     switch (activeScreen) {
       case "loading":
@@ -88,23 +93,23 @@ export const App = ({ context, dataset }: AppProps) => {
       case "location":
         return (
           <LocationTab
-            context={context}
-            selectedLocation={selectedLocation}
-            onLocationConfirmed={(location) => {
-              setSelectedLocation(location);
-              setActiveScreen("access");
-            }}
-            onBack={() =>
-              selectedLocation.flocCode
-                ? setActiveScreen("access")
-                : setActiveScreen("go")
-            }
-          />
+  context={context}
+  selectedLocation={selectedLocation}
+
+  onLocationConfirmed={(location) => {
+    setSelectedLocation(location);
+    setActiveScreen("access");
+  }}
+
+  onHome={() => setActiveScreen("access")}
+/>
         );
 
       default:
+      
         return (
           <AccessTab
+            environmentName={environmentName}
             selectedLocation={selectedLocation}
             onGeoLocation={() => setActiveScreen("geoLocation")}
             onEquipmentSort={() => setActiveScreen("equipmentSort")}

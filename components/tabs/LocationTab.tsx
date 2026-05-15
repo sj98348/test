@@ -1,101 +1,130 @@
 import * as React from "react";
-import { useState } from "react";
-import {
-  DefaultButton,
-  PrimaryButton,
-  Spinner,
-  SpinnerSize
-} from "@fluentui/react";
+import { useEffect, useState } from "react";
+import { DefaultButton, PrimaryButton, TextField } from "@fluentui/react";
 
 import { IInputs } from "../../generated/ManifestTypes";
-import {
-  LocationOption,
-  SelectedLocation
-} from "../../models/LocationModels";
-
+import { LocationOption, SelectedLocation } from "../../models/LocationModels";
+import { FlocLocationService } from "../../services/dataverse/FlocLocationService";
 import { UserPrimaryFlocService } from "../../services/dataverse/UserPrimaryFlocService";
 
 interface Props {
   context: ComponentFramework.Context<IInputs>;
   selectedLocation: SelectedLocation;
   onLocationConfirmed: (location: SelectedLocation) => void;
-  onBack: () => void;
+  onHome: () => void;
 }
 
-const buList: string[] = [
-  "G&P",
-  "Marine",
-  "Pipeline",
-  "Refining",
-  "Terminals"
-];
-
-const locationList: LocationOption[] = [
-  {
-    id: "sp-refinery",
-    name: "St. Paul Park Refinery Complex",
-    bu: "Refining",
-    flocCode: "20"
-  },
-  {
-    id: "refinery-2",
-    name: "Refining Location 2",
-    bu: "Refining",
-    flocCode: "21"
-  },
-  {
-    id: "marine-1",
-    name: "Marine Location 1",
-    bu: "Marine",
-    flocCode: "30"
-  },
-  {
-    id: "pipeline-1",
-    name: "Pipeline Location 1",
-    bu: "Pipeline",
-    flocCode: "40"
-  },
-  {
-    id: "terminal-1",
-    name: "Terminal Location 1",
-    bu: "Terminals",
-    flocCode: "50"
-  },
-  {
-    id: "gp-1",
-    name: "G&P Location 1",
-    bu: "G&P",
-    flocCode: "60"
-  }
-];
+const hardcodedBUList = ["G&P", "Marine", "Pipeline", "Refining", "Terminals"];
 
 export const LocationTab = ({
   context,
+  selectedLocation,
   onLocationConfirmed,
-  onBack
+  onHome
 }: Props) => {
+  const [allLocations, setAllLocations] = useState<LocationOption[]>([]);
+  const [filteredLocations, setFilteredLocations] = useState<LocationOption[]>([]);
+  const [buList, setBuList] = useState<string[]>(hardcodedBUList);
   const [selectedBU, setSelectedBU] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState("");
+  const [filterText, setFilterText] = useState("");
   const [status, setStatus] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [userName, setUserName] = useState("");
 
-  const filteredLocations = locationList.filter(
-    (location) => location.bu === selectedBU
-  );
+  useEffect(() => {
+    const loadLocations = async () => {
+      try {
+        setStatus("Loading locations...");
 
-  const selectedLocation = locationList.find(
-    (location) => location.id === selectedLocationId
-  );
+        const user = await UserPrimaryFlocService.getLoggedInUser(context);
+        setUserName(user.fullName || "Current User");
+
+        const locations = await FlocLocationService.getAllLocations(context);
+
+        setAllLocations(locations);
+        setBuList(hardcodedBUList);
+        setStatus("");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        setStatus(`Error loading locations: ${message}`);
+      }
+    };
+
+    loadLocations();
+  }, [context]);
+
+  const filterLocations = (bu: string, text: string) => {
+    let result = allLocations;
+
+    if (bu) {
+      result = result.filter((location) => location.bu === bu);
+    }
+
+    if (text) {
+      const search = text.toLowerCase();
+
+      result = result.filter(
+        (location) =>
+          location.name.toLowerCase().includes(search) ||
+          location.flocName?.toLowerCase().includes(search) ||
+          location.flocCode.toLowerCase().includes(search)
+      );
+    }
+
+    setFilteredLocations(result);
+  };
+
+  const selectBU = (bu: string) => {
+    setSelectedBU(bu);
+    setSelectedLocationId("");
+    filterLocations(bu, filterText);
+  };
+
+  const onFilterChange = (value?: string) => {
+    const text = value || "";
+
+    setFilterText(text);
+    filterLocations(selectedBU, text);
+  };
+
+  const showLocationsNearMe = async () => {
+    try {
+      setStatus("Getting current location...");
+
+      const position = await UserPrimaryFlocService.getCurrentPosition();
+
+      const nearby = FlocLocationService.filterNearMe(
+        allLocations,
+        position.latitude,
+        position.longitude,
+        50
+      );
+
+      setSelectedBU("");
+      setSelectedLocationId("");
+      setFilteredLocations(nearby);
+      setStatus("");
+    } catch {
+      setStatus(
+        "This feature is available to mobile devices with location services and GPS enabled."
+      );
+    }
+  };
 
   const confirmLocation = async () => {
-    if (!selectedLocation) {
+    const selected = allLocations.find(
+      (location) => location.id === selectedLocationId
+    );
+
+    if (!selected) {
       setStatus("Please select a location.");
       return;
     }
 
     try {
       setIsSaving(true);
-      setStatus("Updating user location...");
+      setStatus("Saving selected location...");
 
       const user = await UserPrimaryFlocService.getLoggedInUser(context);
 
@@ -103,63 +132,80 @@ export const LocationTab = ({
         context,
         user.email,
         user.entraObjectId,
-        selectedLocation.flocCode
+        selected.flocCode
       );
 
       onLocationConfirmed({
-        id: selectedLocation.id,
-        name: selectedLocation.name,
-        bu: selectedLocation.bu,
-        flocCode: selectedLocation.flocCode
+        id: selected.id,
+        name: selected.name || selected.flocName || selected.flocCode,
+        bu: selected.bu,
+        flocCode: selected.flocCode,
+        latitude: selected.latitude,
+        longitude: selected.longitude
       });
-
-      setStatus("Location updated successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      setStatus(`Error: ${message}`);
+      setStatus(`Error saving location: ${message}`);
     } finally {
       setIsSaving(false);
     }
   };
 
+  const selected = allLocations.find(
+    (location) => location.id === selectedLocationId
+  );
+
   return (
     <div>
       <div style={headerStyle}>
-        <div style={{ fontSize: 24, fontWeight: 600 }}>Locations</div>
-        <div style={{ fontSize: 32 }}>⌂</div>
+        <div>
+          <div style={{ fontSize: 24, fontWeight: 600 }}>Locations</div>
+          <div style={{ fontSize: 13 }}>
+            {selectedLocation.name || "Set Location"}
+          </div>
+        </div>
+
+        <button style={homeButtonStyle} onClick={onHome} title="Home">
+          ⌂
+        </button>
       </div>
 
-      <div style={{ padding: 14 }}>
-        <div style={userSection}>
-          <div style={userIcon}>👤</div>
-          <div>
-            <div style={{ fontWeight: 600 }}>Current User</div>
+      <div style={{ padding: 12, textAlign: "center" }}>
+        <div style={userBlock}>
+          <div style={avatarStyle}>👤</div>
+
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontWeight: 600 }}>
+              {userName || "Current User"}
+            </div>
+
             <div style={{ fontSize: 12 }}>
-              Select a business unit and location
+              {selectedLocation.name || "No location selected"}
             </div>
           </div>
         </div>
 
         <PrimaryButton
           text="Show Locations Near Me"
-          styles={{ root: { width: "100%", marginTop: 12 } }}
+          onClick={showLocationsNearMe}
+          styles={{ root: { width: 240, marginTop: 8 } }}
         />
 
-        <h3 style={{ textAlign: "center" }}>
-          Select a different location
-        </h3>
+        <h3>Select a different location.</h3>
 
-        <div style={contentLayout}>
+        <TextField
+          placeholder="Filter by Text"
+          value={filterText}
+          onChange={(_, value) => onFilterChange(value)}
+        />
+
+        <div style={mainArea}>
           <div style={buPanel}>
             {buList.map((bu) => (
               <DefaultButton
                 key={bu}
                 text={bu}
-                onClick={() => {
-                  setSelectedBU(bu);
-                  setSelectedLocationId("");
-                  setStatus("");
-                }}
+                onClick={() => selectBU(bu)}
                 styles={{
                   root: {
                     width: "100%",
@@ -172,15 +218,9 @@ export const LocationTab = ({
           </div>
 
           <div style={locationPanel}>
-            {!selectedBU && (
-              <div style={emptyMessage}>
+            {!selectedBU && filteredLocations.length === 0 && (
+              <div style={emptyText}>
                 Select a business unit to view locations
-              </div>
-            )}
-
-            {selectedBU && filteredLocations.length === 0 && (
-              <div style={emptyMessage}>
-                No locations found for selected BU
               </div>
             )}
 
@@ -193,39 +233,45 @@ export const LocationTab = ({
                   border:
                     selectedLocationId === location.id
                       ? "2px solid #0078d4"
-                      : "1px solid #ddd"
+                      : "1px solid #bbb"
                 }}
               >
-                <div style={{ fontWeight: 600 }}>{location.name}</div>
-                <div style={{ fontSize: 12 }}>
-                  BU: {location.bu} | FLOC: {location.flocCode}
-                </div>
+                {location.name || location.flocName || location.flocCode}
               </div>
             ))}
           </div>
         </div>
 
+        {selected && (
+          <div style={{ marginTop: 8, fontSize: 13 }}>
+            Set Location to {selected.name || selected.flocName}?
+          </div>
+        )}
+
         {status && (
-          <div style={{ textAlign: "center", fontSize: 12, marginTop: 10 }}>
+          <div style={{ marginTop: 8, fontSize: 12 }}>
             {status}
           </div>
         )}
 
-        {isSaving && (
-          <Spinner size={SpinnerSize.small} label="Saving..." />
-        )}
-
         <PrimaryButton
-          text="Confirm"
+          text={isSaving ? "Saving..." : "Confirm"}
+          disabled={!selectedLocationId || isSaving}
           onClick={confirmLocation}
-          disabled={!selectedLocation || isSaving}
-          styles={{ root: { width: "100%", marginTop: 14 } }}
-        />
-
-        <DefaultButton
-          text="Back"
-          onClick={onBack}
-          styles={{ root: { width: "100%", marginTop: 10 } }}
+          styles={{
+            root: {
+              width: 180,
+              marginTop: 8,
+              background: selectedLocationId ? "#315f32" : "#d0d0d0",
+              borderColor: selectedLocationId ? "#315f32" : "#d0d0d0",
+              color: "#fff"
+            },
+            rootDisabled: {
+              background: "#d0d0d0",
+              borderColor: "#d0d0d0",
+              color: "#ffffff"
+            }
+          }}
         />
       </div>
     </div>
@@ -238,20 +284,32 @@ const headerStyle: React.CSSProperties = {
   textAlign: "center",
   padding: "14px 8px",
   display: "flex",
-  justifyContent: "space-around",
-  alignItems: "center"
+  justifyContent: "center",
+  alignItems: "center",
+  position: "relative"
 };
 
-const userSection: React.CSSProperties = {
+const homeButtonStyle: React.CSSProperties = {
+  position: "absolute",
+  right: 16,
+  top: 10,
+  fontSize: 34,
+  color: "#fff",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer"
+};
+
+const userBlock: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 12,
-  justifyContent: "center"
+  justifyContent: "center",
+  gap: 12
 };
 
-const userIcon: React.CSSProperties = {
-  width: 48,
-  height: 48,
+const avatarStyle: React.CSSProperties = {
+  width: 56,
+  height: 56,
   borderRadius: "50%",
   border: "2px solid #a52a2a",
   display: "flex",
@@ -259,34 +317,34 @@ const userIcon: React.CSSProperties = {
   justifyContent: "center"
 };
 
-const contentLayout: React.CSSProperties = {
+const mainArea: React.CSSProperties = {
   display: "flex",
-  marginTop: 16,
-  border: "1px solid #ddd",
-  minHeight: 260
+  marginTop: 12,
+  border: "1px solid #ccc",
+  height: 340
 };
 
 const buPanel: React.CSSProperties = {
   width: 120,
   padding: 8,
-  borderRight: "1px solid #ddd",
-  background: "#f7f7f7"
+  background: "#f0f0f0",
+  borderRight: "1px solid #ccc"
 };
 
 const locationPanel: React.CSSProperties = {
   flex: 1,
-  padding: 10
-};
-
-const emptyMessage: React.CSSProperties = {
-  textAlign: "center",
-  marginTop: 70,
-  fontSize: 18
+  padding: 8,
+  overflowY: "auto"
 };
 
 const locationCard: React.CSSProperties = {
   padding: 10,
   marginBottom: 8,
-  background: "#ffffff",
+  background: "#f7f7f7",
   cursor: "pointer"
+};
+
+const emptyText: React.CSSProperties = {
+  marginTop: 80,
+  fontSize: 18
 };

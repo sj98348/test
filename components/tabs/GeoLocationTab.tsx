@@ -38,9 +38,9 @@ export const GeoLocationTab = ({
     try {
       setSaveStatus("Getting current location and saving...");
 
-      await UserPrimaryFlocService.createOrUpdateTestLocation(context);
+      await UserPrimaryFlocService.saveCurrentLocation(context);
 
-      setSaveStatus("Saved successfully. FLOC Code updated as 20.");
+      setSaveStatus("FLOC Code updated successfully.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       setSaveStatus(`Error: ${message}`);

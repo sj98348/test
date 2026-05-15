@@ -1,24 +1,25 @@
 import * as React from "react";
-import { DefaultButton, PrimaryButton } from "@fluentui/react";
+import { DefaultButton } from "@fluentui/react";
 import { SelectedLocation } from "../../models/LocationModels";
 
-interface Props {
+interface AccessTabProps {
+  environmentName: string;
   selectedLocation: SelectedLocation;
-
   onGeoLocation: () => void;
   onEquipmentSort: () => void;
   onFunctionalLocation: () => void;
-
   onChangeLocation: () => void;
+  
 }
 
 export const AccessTab = ({
+  environmentName,
   selectedLocation,
   onGeoLocation,
   onEquipmentSort,
   onFunctionalLocation,
   onChangeLocation
-}: Props) => {
+}: AccessTabProps) => {
   const locationName =
     selectedLocation.name && selectedLocation.name !== "Set Location"
       ? selectedLocation.name
@@ -31,9 +32,7 @@ export const AccessTab = ({
           Smart Equipment Access
         </div>
 
-        <div style={{ fontSize: 13 }}>
-          {locationName}
-        </div>
+        <div style={{ fontSize: 13 }}>{locationName}</div>
       </div>
 
       <div style={{ padding: 24, textAlign: "center" }}>
@@ -57,42 +56,17 @@ export const AccessTab = ({
           styles={buttonStyle}
         />
 
-        <div style={{ marginTop: 40 }}>
-  <PrimaryButton
-    text="Change Location"
-    onClick={onChangeLocation}
-    styles={{
-      root: {
-        width: "100%"
-      }
-    }}
-  />
-</div>
+        <div style={footerStyle}>
+          <div
+            style={changeLocationStyle}
+            onClick={onChangeLocation}
+            title="Change Location"
+          >
+            <div style={changeIconStyle}>⌖</div>
+            <div style={{ fontSize: 12 }}>Change Location</div>
+          </div>
 
-<div
-  style={{
-    marginTop: 14,
-    fontSize: 12,
-    cursor: "pointer",
-    textDecoration: "underline"
-  }}
-  onClick={onChangeLocation}
->
-  Change Location
-</div>
-
-        <div style={{ marginTop: 16, fontSize: 12 }}>
-          Current Location:
-        </div>
-
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            marginTop: 4
-          }}
-        >
-          {locationName}
+          <div style={environmentStyle}>{environmentName}</div>
         </div>
       </div>
     </div>
@@ -114,4 +88,28 @@ const buttonStyle = {
     fontSize: 18,
     whiteSpace: "normal"
   }
+};
+
+const footerStyle: React.CSSProperties = {
+  marginTop: 32,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-end"
+};
+
+const changeLocationStyle: React.CSSProperties = {
+  display: "inline-flex",
+  flexDirection: "column",
+  alignItems: "center",
+  cursor: "pointer"
+};
+
+const changeIconStyle: React.CSSProperties = {
+  fontSize: 34,
+  lineHeight: "34px"
+};
+
+const environmentStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#333"
 };

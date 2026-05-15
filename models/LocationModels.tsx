@@ -3,6 +3,8 @@ export interface SelectedLocation {
   name: string;
   bu: string;
   flocCode: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface LocationOption {
@@ -10,4 +12,8 @@ export interface LocationOption {
   name: string;
   bu: string;
   flocCode: string;
+  flocName?: string;
+  geoSearchType?: string;
+  latitude?: number;
+  longitude?: number;
 }
