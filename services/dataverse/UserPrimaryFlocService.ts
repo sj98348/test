@@ -1,42 +1,42 @@
 import { IInputs } from "../../generated/ManifestTypes";
-
-const TABLE_NAME = "ngmm_ngmmsmartnotificationsuserprimaryfloc";
-const PRIMARY_KEY_FIELD = "ngmm_ngmmsmartnotificationsuserprimaryflocid";
-
-const EMAIL_FIELD = "ngmm_emailaddress";
-const ENTRA_OBJECT_ID_FIELD = "ngmm_entraobjectid";
-const FLOC_CODE_FIELD = "ngmm_floccode";
+import {
+  DataverseTables,
+  UserPrimaryFlocFields
+} from "../config/DataverseConfig";
+import { DataverseRepository } from "./DataverseRepository";
 
 export interface GeoPosition {
   latitude: number;
   longitude: number;
 }
 
-export class UserPrimaryFlocService {
-  
- public static async getLoggedInUser(
-  context: ComponentFramework.Context<IInputs>
-): Promise<{
+export interface LoggedInUser {
   email: string;
   entraObjectId: string;
   fullName: string;
-}> {
-  const userId = context.userSettings.userId
-    .replace("{", "")
-    .replace("}", "");
-
-  const user = await context.webAPI.retrieveRecord(
-    "systemuser",
-    userId,
-    "?$select=internalemailaddress,azureactivedirectoryobjectid,fullname"
-  );
-
-  return {
-    email: String(user.internalemailaddress || ""),
-    entraObjectId: String(user.azureactivedirectoryobjectid || ""),
-    fullName: String(user.fullname || "")
-  };
 }
+
+export class UserPrimaryFlocService {
+  public static async getLoggedInUser(
+    context: ComponentFramework.Context<IInputs>
+  ): Promise<LoggedInUser> {
+    const userId = context.userSettings.userId
+      .replace("{", "")
+      .replace("}", "");
+
+    const user = await DataverseRepository.retrieve(
+      context,
+      "systemuser",
+      userId,
+      "?$select=internalemailaddress,azureactivedirectoryobjectid,fullname"
+    );
+
+    return {
+      email: String(user.internalemailaddress || ""),
+      entraObjectId: String(user.azureactivedirectoryobjectid || ""),
+      fullName: String(user.fullname || "")
+    };
+  }
 
   public static getCurrentPosition(): Promise<GeoPosition> {
     return new Promise((resolve, reject) => {
@@ -70,11 +70,14 @@ export class UserPrimaryFlocService {
     const user = await this.getLoggedInUser(context);
 
     const query =
-      `?$select=${FLOC_CODE_FIELD}` +
-      `&$filter=${EMAIL_FIELD} eq '${user.email.replace("'", "''")}'`;
+      `?$select=${UserPrimaryFlocFields.flocCode}` +
+      `&$filter=${UserPrimaryFlocFields.email} eq '${this.escapeODataText(
+        user.email
+      )}'`;
 
-    const result = await context.webAPI.retrieveMultipleRecords(
-      TABLE_NAME,
+    const result = await DataverseRepository.retrieveMultiple(
+      context,
+      DataverseTables.userPrimaryFloc,
       query
     );
 
@@ -82,7 +85,7 @@ export class UserPrimaryFlocService {
       return "";
     }
 
-    return String(result.entities[0][FLOC_CODE_FIELD] || "");
+    return String(result.entities[0][UserPrimaryFlocFields.flocCode] || "");
   }
 
   public static async updateUserPrimaryFlocCode(
@@ -92,26 +95,38 @@ export class UserPrimaryFlocService {
     flocCode: string
   ): Promise<void> {
     const query =
-      `?$select=${PRIMARY_KEY_FIELD},${EMAIL_FIELD}` +
-      `&$filter=${EMAIL_FIELD} eq '${email.replace("'", "''")}'`;
+      `?$select=${UserPrimaryFlocFields.id},${UserPrimaryFlocFields.email}` +
+      `&$filter=${UserPrimaryFlocFields.email} eq '${this.escapeODataText(
+        email
+      )}'`;
 
-    const existing = await context.webAPI.retrieveMultipleRecords(
-      TABLE_NAME,
+    const existing = await DataverseRepository.retrieveMultiple(
+      context,
+      DataverseTables.userPrimaryFloc,
       query
     );
 
     const payload = {
-      [EMAIL_FIELD]: email,
-      [ENTRA_OBJECT_ID_FIELD]: entraObjectId,
-      [FLOC_CODE_FIELD]: flocCode
+      [UserPrimaryFlocFields.email]: email,
+      [UserPrimaryFlocFields.entraObjectId]: entraObjectId,
+      [UserPrimaryFlocFields.flocCode]: flocCode
     };
 
     if (existing.entities.length > 0) {
-      const recordId = existing.entities[0][PRIMARY_KEY_FIELD];
+      const recordId = String(existing.entities[0][UserPrimaryFlocFields.id]);
 
-      await context.webAPI.updateRecord(TABLE_NAME, recordId, payload);
+      await DataverseRepository.update(
+        context,
+        DataverseTables.userPrimaryFloc,
+        recordId,
+        payload
+      );
     } else {
-      await context.webAPI.createRecord(TABLE_NAME, payload);
+      await DataverseRepository.create(
+        context,
+        DataverseTables.userPrimaryFloc,
+        payload
+      );
     }
   }
 
@@ -119,7 +134,6 @@ export class UserPrimaryFlocService {
     context: ComponentFramework.Context<IInputs>
   ): Promise<void> {
     const user = await this.getLoggedInUser(context);
-
     const position = await this.getCurrentPosition();
 
     console.log("Latitude:", position.latitude);
@@ -131,5 +145,9 @@ export class UserPrimaryFlocService {
       user.entraObjectId,
       "20"
     );
+  }
+
+  private static escapeODataText(value: string): string {
+    return value.replace(/'/g, "''");
   }
 }

@@ -3,7 +3,9 @@ import { createRoot, Root } from "react-dom/client";
 import { IInputs, IOutputs } from "./generated/ManifestTypes";
 import { App } from "./App";
 
-export class FSMobileDatasetv2 implements ComponentFramework.StandardControl<IInputs, IOutputs> {
+export class FSMobileDatasetv2
+  implements ComponentFramework.StandardControl<IInputs, IOutputs>
+{
   private container!: HTMLDivElement;
   private root!: Root;
 
@@ -13,6 +15,8 @@ export class FSMobileDatasetv2 implements ComponentFramework.StandardControl<IIn
     state: ComponentFramework.Dictionary,
     container: HTMLDivElement
   ): void {
+    context.mode.trackContainerResize(true);
+
     this.container = container;
     this.root = createRoot(this.container);
   }
@@ -21,7 +25,9 @@ export class FSMobileDatasetv2 implements ComponentFramework.StandardControl<IIn
     this.root.render(
       React.createElement(App, {
         context: context,
-        dataset: context.parameters.sampleDataSet
+        dataset: context.parameters.sampleDataSet,
+        width: context.mode.allocatedWidth,
+        height: context.mode.allocatedHeight
       })
     );
   }

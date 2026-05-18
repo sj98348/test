@@ -13,8 +13,7 @@ interface Props {
   onLocationConfirmed: (location: SelectedLocation) => void;
   onHome: () => void;
 }
-
-const hardcodedBUList = ["G&P", "Marine", "Pipeline", "Refining", "Terminals"];
+const hardcodedBUList = ["G&P", "Marine", "Pipeline", "Refining", "Terminal"];
 
 export const LocationTab = ({
   context,
@@ -55,24 +54,16 @@ export const LocationTab = ({
   }, [context]);
 
   const filterLocations = (bu: string, text: string) => {
-    let result = allLocations;
+    const buFiltered = bu
+      ? FlocLocationService.filterByBU(allLocations, bu)
+      : allLocations;
 
-    if (bu) {
-      result = result.filter((location) => location.bu === bu);
-    }
+    const textFiltered = FlocLocationService.filterByText(
+      buFiltered,
+      text
+    );
 
-    if (text) {
-      const search = text.toLowerCase();
-
-      result = result.filter(
-        (location) =>
-          location.name.toLowerCase().includes(search) ||
-          location.flocName?.toLowerCase().includes(search) ||
-          location.flocCode.toLowerCase().includes(search)
-      );
-    }
-
-    setFilteredLocations(result);
+    setFilteredLocations(textFiltered);
   };
 
   const selectBU = (bu: string) => {
@@ -137,7 +128,7 @@ export const LocationTab = ({
 
       onLocationConfirmed({
         id: selected.id,
-        name: selected.name || selected.flocName || selected.flocCode,
+        name: selected.flocName || selected.name || selected.flocCode,
         bu: selected.bu,
         flocCode: selected.flocCode,
         latitude: selected.latitude,
@@ -236,7 +227,7 @@ export const LocationTab = ({
                       : "1px solid #bbb"
                 }}
               >
-                {location.name || location.flocName || location.flocCode}
+                {location.flocName || location.name || location.flocCode}
               </div>
             ))}
           </div>
@@ -244,7 +235,7 @@ export const LocationTab = ({
 
         {selected && (
           <div style={{ marginTop: 8, fontSize: 13 }}>
-            Set Location to {selected.name || selected.flocName}?
+            Set Location to {selected.flocName || selected.name}??
           </div>
         )}
 

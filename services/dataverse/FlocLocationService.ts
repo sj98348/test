@@ -1,40 +1,83 @@
 import { IInputs } from "../../generated/ManifestTypes";
 import { LocationOption } from "../../models/LocationModels";
-
-const FLOC_LOCATION_TABLE = "ngmm_ngmmsmartnotificationsprimaryfloc";
-
-const PRIMARY_KEY_FIELD = "ngmm_ngmmsmartnotificationsprimaryflocid";
-const NAME_FIELD = "ngmm_newcolumn";
-const LONGITUDE_FIELD = "ngmm_longitude";
-const LATITUDE_FIELD = "ngmm_latitude";
-const GEO_SEARCH_TYPE_FIELD = "ngmm_geosearchtype";
-const FLOC_NAME_FIELD = "ngmm_flocname";
-const FLOC_CODE_FIELD = "ngmm_floccode";
-const BU_FIELD = "ngmm_businessunit";
+import {
+  CacheKeys,
+  DataverseTables,
+  PrimaryFlocFields
+} from "../config/DataverseConfig";
+import { LocalCacheService } from "../cache/LocalCacheService";
+import { DataverseRepository } from "./DataverseRepository";
 
 export class FlocLocationService {
   public static async getAllLocations(
-    context: ComponentFramework.Context<IInputs>
+    context: ComponentFramework.Context<IInputs>,
+    forceRefresh = false
   ): Promise<LocationOption[]> {
-    const query =
-      `?$select=${PRIMARY_KEY_FIELD},${NAME_FIELD},${LONGITUDE_FIELD},${LATITUDE_FIELD},${GEO_SEARCH_TYPE_FIELD},${FLOC_NAME_FIELD},${FLOC_CODE_FIELD},${BU_FIELD}` +
-      `&$orderby=${NAME_FIELD} asc`;
+    if (!forceRefresh) {
+      const cachedLocations = LocalCacheService.get<LocationOption[]>(
+        CacheKeys.primaryFlocLocations
+      );
 
-    const result = await context.webAPI.retrieveMultipleRecords(
-      FLOC_LOCATION_TABLE,
-      query
-    );
+      if (cachedLocations && cachedLocations.length > 0) {
+        console.log("Using cached FLOC locations", cachedLocations.length);
+        return cachedLocations;
+      }
+    }
 
-    return result.entities.map((row) => ({
-      id: String(row[PRIMARY_KEY_FIELD]),
-      name: String(row[NAME_FIELD] || ""),
-      bu: String(row[BU_FIELD] || ""),
-      flocCode: String(row[FLOC_CODE_FIELD] || ""),
-      flocName: String(row[FLOC_NAME_FIELD] || ""),
-      geoSearchType: String(row[GEO_SEARCH_TYPE_FIELD] || ""),
-      latitude: row[LATITUDE_FIELD] ? Number(row[LATITUDE_FIELD]) : undefined,
-      longitude: row[LONGITUDE_FIELD] ? Number(row[LONGITUDE_FIELD]) : undefined
-    }));
+    try {
+      const query =
+        `?$select=${PrimaryFlocFields.id},${PrimaryFlocFields.name},` +
+        `${PrimaryFlocFields.longitude},${PrimaryFlocFields.latitude},` +
+        `${PrimaryFlocFields.geoSearchType},${PrimaryFlocFields.flocName},` +
+        `${PrimaryFlocFields.flocCode},${PrimaryFlocFields.businessUnit}` +
+        `&$orderby=${PrimaryFlocFields.name} asc`;
+
+      const result = await DataverseRepository.retrieveMultiple(
+        context,
+        DataverseTables.primaryFloc,
+        query
+      );
+
+      console.log("Raw FLOC records", result.entities);
+
+      const mappedLocations = result.entities.map((row) => ({
+        id: String(row[PrimaryFlocFields.id] || ""),
+        name: String(row[PrimaryFlocFields.name] || ""),
+        bu: String(
+          row[
+            `${PrimaryFlocFields.businessUnit}@OData.Community.Display.V1.FormattedValue`
+          ] || row[PrimaryFlocFields.businessUnit] || ""
+        ),
+        flocCode: String(row[PrimaryFlocFields.flocCode] || ""),
+        flocName: String(row[PrimaryFlocFields.flocName] || ""),
+        geoSearchType: String(row[PrimaryFlocFields.geoSearchType] || ""),
+        latitude: row[PrimaryFlocFields.latitude]
+          ? Number(row[PrimaryFlocFields.latitude])
+          : undefined,
+        longitude: row[PrimaryFlocFields.longitude]
+          ? Number(row[PrimaryFlocFields.longitude])
+          : undefined
+      }));
+
+      LocalCacheService.set(CacheKeys.primaryFlocLocations, mappedLocations);
+
+      return mappedLocations;
+    } catch (error) {
+      const cachedLocations = LocalCacheService.get<LocationOption[]>(
+        CacheKeys.primaryFlocLocations
+      );
+
+      if (cachedLocations && cachedLocations.length > 0) {
+        console.log("Dataverse load failed. Using cached FLOC locations", error);
+        return cachedLocations;
+      }
+
+      throw error;
+    }
+  }
+
+  public static clearLocationCache(): void {
+    LocalCacheService.remove(CacheKeys.primaryFlocLocations);
   }
 
   public static getDistinctBUs(locations: LocationOption[]): string[] {
@@ -51,54 +94,80 @@ export class FlocLocationService {
     locations: LocationOption[],
     bu: string
   ): LocationOption[] {
-    return locations.filter((location) => location.bu === bu);
+    const selectedBu = this.normalizeText(bu);
+
+    return locations.filter(
+      (location) => this.normalizeText(location.bu) === selectedBu
+    );
   }
-  public static filterNearMe(
-  locations: LocationOption[],
-  latitude: number,
-  longitude: number,
-  radiusMiles: number
-): LocationOption[] {
-  return locations.filter((location) => {
-    if (!location.latitude || !location.longitude) {
-      return false;
+
+  public static filterByText(
+    locations: LocationOption[],
+    text: string
+  ): LocationOption[] {
+    const search = this.normalizeText(text);
+
+    if (!search) {
+      return locations;
     }
 
-    const distance = this.calculateDistanceMiles(
-      latitude,
-      longitude,
-      location.latitude,
-      location.longitude
+    return locations.filter(
+      (location) =>
+        this.normalizeText(location.name).includes(search) ||
+        this.normalizeText(location.flocName || "").includes(search) ||
+        this.normalizeText(location.flocCode).includes(search)
     );
+  }
 
-    return distance <= radiusMiles;
-  });
-}
+  public static filterNearMe(
+    locations: LocationOption[],
+    latitude: number,
+    longitude: number,
+    radiusMiles: number
+  ): LocationOption[] {
+    return locations.filter((location) => {
+      if (!location.latitude || !location.longitude) {
+        return false;
+      }
 
-private static calculateDistanceMiles(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const earthRadiusMiles = 3958.8;
+      const distance = this.calculateDistanceMiles(
+        latitude,
+        longitude,
+        location.latitude,
+        location.longitude
+      );
 
-  const dLat = this.toRadians(lat2 - lat1);
-  const dLon = this.toRadians(lon2 - lon1);
+      return distance <= radiusMiles;
+    });
+  }
 
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(this.toRadians(lat1)) *
-      Math.cos(this.toRadians(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+  private static calculateDistanceMiles(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ): number {
+    const earthRadiusMiles = 3958.8;
+    const dLat = this.toRadians(lat2 - lat1);
+    const dLon = this.toRadians(lon2 - lon1);
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRadians(lat1)) *
+        Math.cos(this.toRadians(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
 
-  return earthRadiusMiles * c;
-}
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-private static toRadians(value: number): number {
-  return value * (Math.PI / 180);
-}
+    return earthRadiusMiles * c;
+  }
+
+  private static toRadians(value: number): number {
+    return value * (Math.PI / 180);
+  }
+
+  private static normalizeText(value: string): string {
+    return value.trim().toLowerCase();
+  }
 }

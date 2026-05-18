@@ -14,8 +14,9 @@ import { UserPrimaryFlocService } from "./services/dataverse/UserPrimaryFlocServ
 export interface AppProps {
   context: ComponentFramework.Context<IInputs>;
   dataset: ComponentFramework.PropertyTypes.DataSet;
-}
-
+  width: number;
+  height: number;
+ }
 export type ScreenKey =
   | "loading"
   | "go"
@@ -25,7 +26,7 @@ export type ScreenKey =
   | "geoLocation"
   | "location";
 
-export const App = ({ context, dataset }: AppProps) => {
+export const App = ({ context, dataset, width, height }: AppProps) => {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("loading");
 
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation>({
@@ -75,19 +76,23 @@ export const App = ({ context, dataset }: AppProps) => {
         return <GoTab onGo={() => setActiveScreen("location")} />;
 
       case "equipmentSort":
-        return <EquipmentSortTab onBack={() => setActiveScreen("access")} />;
+        return <EquipmentSortTab
+         onBack={() => setActiveScreen("access")}
+         onHome={() => setActiveScreen("access")}/>;
 
       case "functionalLocation":
-        return <FunctionalLocationTab onBack={() => setActiveScreen("access")} />;
+        return <FunctionalLocationTab
+         onBack={() => setActiveScreen("access")}
+         onHome={() => setActiveScreen("access")}/>;
 
       case "geoLocation":
         return (
           <GeoLocationTab
-            context={context}
-            dataset={dataset}
-            selectedLocation={selectedLocation}
-            onBack={() => setActiveScreen("access")}
-          />
+          context={context}
+          dataset={dataset}
+          selectedLocation={selectedLocation}
+          onBack={() => setActiveScreen("access")}
+         />
         );
 
       case "location":
@@ -120,5 +125,9 @@ export const App = ({ context, dataset }: AppProps) => {
     }
   };
 
-  return <MainLayout>{renderScreen()}</MainLayout>;
+  return (
+  <MainLayout width={width} height={height}>
+    {renderScreen()}
+  </MainLayout>
+);
 };

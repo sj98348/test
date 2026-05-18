@@ -1,17 +1,16 @@
 import * as React from "react";
 import { useState } from "react";
-import { IInputs } from "../../generated/ManifestTypes";
 import {
   PrimaryButton,
-  DefaultButton,
   Dropdown,
   IDropdownOption,
-  ChoiceGroup
+  ChoiceGroup,
+  IChoiceGroupOption
 } from "@fluentui/react";
 
-import { PinActionDialog } from "../maps/PinActionDialog";
-import { UserPrimaryFlocService } from "../../services/dataverse/UserPrimaryFlocService";
+import { IInputs } from "../../generated/ManifestTypes";
 import { SelectedLocation } from "../../models/LocationModels";
+import { UserPrimaryFlocService } from "../../services/dataverse/UserPrimaryFlocService";
 
 interface Props {
   context: ComponentFramework.Context<IInputs>;
@@ -20,110 +19,193 @@ interface Props {
   onBack: () => void;
 }
 
+interface EquipmentItem {
+  id: string;
+  name: string;
+  description: string;
+}
+
 const categoryOptions: IDropdownOption[] = [
   { key: "pump", text: "Pump" },
   { key: "valve", text: "Valve" },
   { key: "compressor", text: "Compressor" }
 ];
 
+const radiusOptions: IChoiceGroupOption[] = [
+  { key: "10", text: "10" },
+  { key: "50", text: "50" },
+  { key: "100", text: "100" },
+  { key: "300", text: "300" }
+];
+
 export const GeoLocationTab = ({
   context,
+  dataset,
   selectedLocation,
   onBack
 }: Props) => {
-  const [showDialog, setShowDialog] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("");
+  const [latitude, setLatitude] = useState<number>(
+    selectedLocation.latitude || 44.85115
+  );
 
-  const saveCurrentLocation  = async () => {
+  const [longitude, setLongitude] = useState<number>(
+    selectedLocation.longitude || -93.00597
+  );
+
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedRadius, setSelectedRadius] = useState<string>("10");
+  const [status, setStatus] = useState("");
+
+  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>([]);
+
+  const useCurrentLocation = async () => {
     try {
-      setSaveStatus("Getting current location and saving...");
+      setStatus("Getting current location...");
+
+      const position = await UserPrimaryFlocService.getCurrentPosition();
+
+      setLatitude(position.latitude);
+      setLongitude(position.longitude);
 
       await UserPrimaryFlocService.saveCurrentLocation(context);
 
-      setSaveStatus("FLOC Code updated successfully.");
+      setStatus("");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      setSaveStatus(`Error: ${message}`);
+      setStatus(`Error: ${message}`);
     }
   };
+
+  const findEquipment = async () => {
+    setStatus("Finding equipment...");
+
+    // TODO: Replace this with Dataverse EquipmentService call later.
+    const mockEquipment: EquipmentItem[] = [
+      {
+        id: "1",
+        name: "01-PC-0082-B",
+        description: "SUPERHEATED STEAM FR... LOOP PRESSURE"
+      },
+      {
+        id: "2",
+        name: "01-PM-1001",
+        description: "PUMP MOTOR EQUIPMENT"
+      }
+    ];
+
+    setEquipmentList(mockEquipment);
+    setStatus("");
+  };
+
+  const mapUrl =
+    `https://dev.virtualearth.net/REST/V1/Imagery/Map/Aerial/` +
+    `${latitude},${longitude}/18?mapSize=380,260&pp=${latitude},${longitude};66`;
 
   return (
     <div>
       <div style={headerStyle}>
-        <div style={{ fontSize: 22, fontWeight: 600 }}>Geo Location</div>
-        <div style={{ fontSize: 13 }}>
-          {selectedLocation.name || "Location Not Selected"}
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 600 }}>Geo Location</div>
+          <div style={{ fontSize: 13 }}>
+            {selectedLocation.name || "Location Not Selected"}
+          </div>
         </div>
+
+        <button style={homeButtonStyle} onClick={onBack}>
+          ⌂
+        </button>
       </div>
 
       <div style={{ padding: 10 }}>
-        <div style={mapPlaceholder}>
-          Map Placeholder
-          <button style={pinStyle} onClick={() => setShowDialog(true)}>
-            📍
-          </button>
+        <div style={mapContainerStyle}>
+          <img
+            src={mapUrl}
+            alt="Map"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover"
+            }}
+          />
+
+          <div style={mapPinStyle}>📍</div>
         </div>
 
         <div style={{ textAlign: "center", fontSize: 12, marginTop: 6 }}>
-          44.85115, -93.00597
+          {latitude.toFixed(5)}, {longitude.toFixed(5)}
         </div>
 
         <PrimaryButton
           text="Use My Current Location"
-          onClick={saveCurrentLocation}
+          onClick={useCurrentLocation}
           styles={{ root: { width: "100%", marginTop: 12 } }}
         />
-
-        {saveStatus && (
-          <div style={{ marginTop: 8, fontSize: 12, textAlign: "center" }}>
-            {saveStatus}
-          </div>
-        )}
 
         <Dropdown
           label="Equipment Category"
           placeholder="Press to Select (optional)"
           options={categoryOptions}
+          selectedKey={selectedCategory}
+          onChange={(_, option) =>
+            setSelectedCategory(String(option?.key || ""))
+          }
         />
 
+        <div style={{ marginTop: 10, fontWeight: 600, textAlign: "center" }}>
+          Search Radius (ft)
+        </div>
+
         <ChoiceGroup
-          label="Search Radius (ft)"
-          options={[
-            { key: "10", text: "10" },
-            { key: "50", text: "50" },
-            { key: "100", text: "100" },
-            { key: "300", text: "300" }
-          ]}
+          selectedKey={selectedRadius}
+          options={radiusOptions}
+          onChange={(_, option) =>
+            setSelectedRadius(String(option?.key || "10"))
+          }
+          styles={{
+            flexContainer: {
+              display: "flex",
+              justifyContent: "center",
+              gap: 14
+            }
+          }}
         />
 
         <PrimaryButton
           text="Find Equipment"
-          styles={{ root: { width: "100%", marginTop: 12 } }}
+          onClick={findEquipment}
+          styles={{
+            root: {
+              width: "100%",
+              marginTop: 12,
+              background: "#315f32",
+              borderColor: "#315f32",
+              fontSize: 18,
+              fontWeight: 600
+            }
+          }}
         />
 
-        <h3 style={{ textAlign: "center" }}>Equipment Returned</h3>
+        <div style={equipmentHeaderStyle}>Equipment Returned</div>
 
-        <div style={{ textAlign: "center", fontSize: 12 }}>
-          12 Results Found
+        {status && (
+          <div style={{ textAlign: "center", fontSize: 12, marginTop: 8 }}>
+            {status}
+          </div>
+        )}
+
+        <div style={equipmentListStyle}>
+          {equipmentList.map((item) => (
+            <div key={item.id} style={equipmentRowStyle}>
+              <div style={{ fontWeight: 600 }}>{item.name}</div>
+              <div style={{ fontSize: 12 }}>{item.description}</div>
+            </div>
+          ))}
         </div>
 
-        <div style={resultCard}>
-          <b>01-PC-0082-B</b>
-          <div>SUPERHEATED STEAM FR... LOOP PRESSURE</div>
-          <DefaultButton text="Pin" onClick={() => setShowDialog(true)} />
+        <div style={{ textAlign: "center", fontSize: 12, marginTop: 8 }}>
+          {equipmentList.length} Results Found
         </div>
-
-        <DefaultButton
-          text="Back"
-          onClick={onBack}
-          styles={{ root: { width: "100%", marginTop: 12 } }}
-        />
       </div>
-
-      <PinActionDialog
-        hidden={!showDialog}
-        onDismiss={() => setShowDialog(false)}
-      />
     </div>
   );
 };
@@ -132,30 +214,54 @@ const headerStyle: React.CSSProperties = {
   background: "#a52a2a",
   color: "#fff",
   textAlign: "center",
-  padding: "14px 8px"
+  padding: "14px 8px",
+  position: "relative"
 };
 
-const mapPlaceholder: React.CSSProperties = {
-  position: "relative",
-  height: 220,
-  background: "#d9d9d9",
-  border: "1px solid #aaa",
-  textAlign: "center",
-  paddingTop: 90
-};
-
-const pinStyle: React.CSSProperties = {
+const homeButtonStyle: React.CSSProperties = {
   position: "absolute",
-  top: 85,
-  left: "50%",
-  fontSize: 28,
+  right: 16,
+  top: 10,
+  fontSize: 34,
+  color: "#fff",
+  background: "transparent",
   border: "none",
-  background: "transparent"
+  cursor: "pointer"
 };
 
-const resultCard: React.CSSProperties = {
+const mapContainerStyle: React.CSSProperties = {
+  position: "relative",
+  height: 260,
+  border: "1px solid #aaa",
+  overflow: "hidden",
+  background: "#d9d9d9"
+};
+
+const mapPinStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "45%",
+  left: "48%",
+  fontSize: 26
+};
+
+const equipmentHeaderStyle: React.CSSProperties = {
+  marginTop: 14,
   padding: 10,
-  marginTop: 10,
-  border: "1px solid #ddd",
+  textAlign: "center",
+  fontSize: 20,
+  fontWeight: 600,
+  background: "#f3f2f1",
+  border: "1px solid #ddd"
+};
+
+const equipmentListStyle: React.CSSProperties = {
+  maxHeight: 220,
+  overflowY: "auto",
+  marginTop: 8
+};
+
+const equipmentRowStyle: React.CSSProperties = {
+  padding: 10,
+  borderBottom: "1px solid #ddd",
   background: "#fff"
 };
