@@ -77,8 +77,11 @@ export const App = ({ context, dataset, width, height }: AppProps) => {
 
       case "equipmentSort":
         return <EquipmentSortTab
-         onBack={() => setActiveScreen("access")}
-         onHome={() => setActiveScreen("access")}/>;
+        context={context}
+        selectedLocation={selectedLocation}
+        onBack={() => setActiveScreen("access")}
+        onHome={() => setActiveScreen("access")}
+        />;
 
       case "functionalLocation":
         return <FunctionalLocationTab
